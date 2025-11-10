@@ -1,0 +1,15 @@
+# Игнорируем ключи и личные данные
+.env
+memory.json
+
+# Папки Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE / редакторы
+.vscode/
+.idea/
+
+# Логи
+*.log
