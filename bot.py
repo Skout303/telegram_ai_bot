@@ -195,19 +195,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Ошибка при обращении к OpenAI.")
 
 # === Запуск ===
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+
 def main():
+    print("🚀 Бот запускается...")
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    # регистрируем обработчики команд
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("info", info))
-    app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("draw", draw))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CommandHandler("reset", reset_command))
+    app.add_handler(CommandHandler("info", info_command))
+    app.add_handler(CommandHandler("draw", draw_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("🤖 Бот запущен и готов работать!")
-    app.run_polling()
+    print("✅ Бот запущен и слушает Telegram...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
