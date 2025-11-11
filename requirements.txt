@@ -5,6 +5,3 @@ python-dotenv
 PyPDF2
 python-docx
 requests
-
-# --- Политика обновления ---
---upgrade-strategy eager
