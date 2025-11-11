@@ -1,21 +1,17 @@
-﻿import json
-import os
-from dotenv import load_dotenv
+﻿import os
+import json
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 from openai import OpenAI
-from telegram import Update, Document
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-)
 import PyPDF2
 from docx import Document as DocxDocument
 
 # === Настройки ===
-load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+MEMORY_FILE = "user_memory.json"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEMORY_FILE = "memory.json"
 
 # === Память ===
 def load_memory():
@@ -36,92 +32,112 @@ user_memory = load_memory()
 # === Команды ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Привет! Отправь мне текст или файл (PDF, TXT, DOCX) — я его запомню. "
-        "Потом можешь спрашивать что угодно про его содержимое.\n\n"
-        "Команды:\n"
-        "📘 /info — показать, что я помню\n"
-        "🧹 /reset — очистить память"
+        "👋 Привет! Я умный бот.\n\n"
+        "📄 Могу читать PDF и DOCX.\n"
+        "🖼️ Улучшаю фото и рисую картинки.\n"
+        "💬 Помню контекст разговора.\n\n"
+        "Напиши /help, чтобы узнать больше!"
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "🤖 <b>Помощь по командам</b>\n\n"
+        "🧠 <b>/start</b> — начать работу\n"
+        "💬 Просто напиши сообщение — бот ответит с учётом контекста\n"
+        "📄 Отправь PDF, DOCX или TXT — бот прочитает файл\n"
+        "🖼️ Отправь фото — бот улучшит или стилизует изображение\n"
+        "🎨 <b>/draw [описание]</b> — нарисовать по тексту\n"
+        "🧽 <b>/reset</b> — очистить память бота\n"
+        "ℹ️ <b>/info</b> — показать инфо о возможностях\n"
+        "❓ <b>/help</b> — показать это меню"
+    )
+    await update.message.reply_text(help_text, parse_mode="HTML")
+
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "ℹ️ Я бот, который умеет:\n"
+        "- Понимать контекст диалога 🧠\n"
+        "- Читать и пересказывать файлы 📄\n"
+        "- Работать с фото 🖼️\n"
+        "- Рисовать по тексту 🎨"
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
-    user_memory[user_id] = []
-    save_memory(user_memory)
-    await update.message.reply_text("🧹 Память очищена!")
+    if user_id in user_memory:
+        del user_memory[user_id]
+        save_memory(user_memory)
+    await update.message.reply_text("🧠 Память очищена. Начинаем заново!")
 
-# 🆕 === Новая команда /info ===
-async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
+# === Работа с файлами ===
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    doc = await update.message.document.get_file()
+    file_name = update.message.document.file_name
+    path = f"user_{update.message.from_user.id}_{file_name}"
+    await doc.download_to_drive(path)
 
-    if user_id not in user_memory or len(user_memory[user_id]) == 0:
-        await update.message.reply_text("🕳 Я пока ничего не помню. Пришли файл или сообщение.")
+    text = ""
+    if file_name.endswith(".pdf"):
+        with open(path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            text = " ".join(page.extract_text() for page in reader.pages)
+    elif file_name.endswith(".docx"):
+        document = DocxDocument(path)
+        text = "\n".join(p.text for p in document.paragraphs)
+    elif file_name.endswith(".txt"):
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read()
+    else:
+        await update.message.reply_text("⚠️ Поддерживаются только PDF, DOCX и TXT.")
+        os.remove(path)
         return
 
-    system_msgs = [m for m in user_memory[user_id] if m["role"] == "system"]
-    last_system = system_msgs[-1]["content"] if system_msgs else ""
-    text_length = len(last_system)
+    os.remove(path)
 
-    await update.message.reply_text(
-        f"🧠 В памяти сейчас:\n"
-        f"- Сообщений: {len(user_memory[user_id])}\n"
-        f"- Размер контекста: {text_length} символов\n\n"
-        f"📄 Я храню краткое содержимое последнего загруженного файла.\n"
-        f"Чтобы очистить память, используй /reset."
+    await update.message.reply_text("📚 Файл получен. Обрабатываю...")
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": f"Кратко перескажи этот текст:\n{text[:4000]}"}],
     )
 
-# === Чтение файлов ===
-def read_file(file_path: str) -> str:
-    ext = os.path.splitext(file_path)[1].lower()
-    text = ""
+    summary = response.choices[0].message.content
+    await update.message.reply_text(f"🧾 Резюме:\n\n{summary}")
 
-    if ext == ".pdf":
-        with open(file_path, "rb") as f:
-            reader = PyPDF2.PdfReader(f)
-            for page in reader.pages:
-                text += page.extract_text() or ""
-    elif ext == ".txt":
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
-    elif ext == ".docx":
-        doc = DocxDocument(file_path)
-        text = "\n".join([p.text for p in doc.paragraphs])
-    else:
-        text = "❌ Формат файла не поддерживается."
-
-    return text.strip()
-
-# === Обработка файлов ===
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    doc: Document = update.message.document
-
-    file = await doc.get_file()
-    file_path = f"temp_{user_id}_{doc.file_name}"
-    await file.download_to_drive(file_path)
+# === Работа с изображениями ===
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.photo[-1].get_file()
+    path = f"user_photo_{update.message.from_user.id}.jpg"
+    await file.download_to_drive(path)
+    await update.message.reply_text("🖼️ Фото получено! Обрабатываю...")
 
     try:
-        content = read_file(file_path)
-        if not content:
-            await update.message.reply_text("Файл пуст или не читается 😢")
-            return
-
-        # Запоминаем содержимое файла как контекст
-        user_memory[user_id] = [{"role": "system", "content": f"Вот содержимое загруженного файла:\n\n{content[:8000]}"}]
-        save_memory(user_memory)
-
-        await update.message.reply_text(
-            f"📘 Я прочитал и запомнил файл: {doc.file_name}\n"
-            f"Теперь можешь задавать вопросы по его содержимому!"
+        result = client.images.generate(
+            model="gpt-image-1",
+            prompt="улучши изображение и добавь художественный стиль"
         )
-
+        image_url = result.data[0].url
+        await update.message.reply_photo(photo=image_url, caption="✨ Готово!")
     except Exception as e:
-        await update.message.reply_text("⚠️ Ошибка при обработке файла.")
-        print(f"File read error: {e}")
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        print("Image error:", e)
+        await update.message.reply_text("⚠️ Ошибка при обработке изображения.")
 
-# === Обработка текстовых сообщений ===
+# === Генерация изображений по описанию ===
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("🎨 Напиши, что нарисовать: /draw кот в шляпе")
+        return
+
+    prompt = " ".join(context.args)
+    await update.message.reply_text(f"🖌️ Рисую: {prompt}...")
+    try:
+        result = client.images.generate(model="gpt-image-1", prompt=prompt)
+        image_url = result.data[0].url
+        await update.message.reply_photo(photo=image_url, caption="🎨 Готово!")
+    except Exception as e:
+        print("Draw error:", e)
+        await update.message.reply_text("⚠️ Не удалось создать изображение.")
+
+# === Общение с памятью ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -132,32 +148,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_memory[user_id].append({"role": "user", "content": text})
 
     try:
-        completion = client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=user_memory[user_id],
+            messages=user_memory[user_id]
         )
-
-        reply = completion.choices[0].message.content
-        await update.message.reply_text(reply)
-
-        user_memory[user_id].append({"role": "assistant", "content": reply})
+        answer = response.choices[0].message.content
+        await update.message.reply_text(answer)
+        user_memory[user_id].append({"role": "assistant", "content": answer})
         save_memory(user_memory)
-
     except Exception as e:
-        await update.message.reply_text("⚠️ Ошибка при обращении к OpenAI API.")
-        print(f"OpenAI error: {e}")
+        print("Chat error:", e)
+        await update.message.reply_text("⚠️ Ошибка при обращении к OpenAI.")
 
-# === Основной запуск ===
+# === Запуск ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("info", info))
     app.add_handler(CommandHandler("reset", reset))
-    app.add_handler(CommandHandler("info", info))  # 🆕 добавили сюда
+    app.add_handler(CommandHandler("draw", draw))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("🤖 Бот с памятью и командой /info запущен!")
+    print("🤖 Бот запущен и готов работать!")
     app.run_polling()
 
 if __name__ == "__main__":
