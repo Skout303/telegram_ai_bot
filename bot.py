@@ -10,6 +10,35 @@ import telegram
 
 # Проверка версии python-telegram-bot
 print(f"🚀 python-telegram-bot version: {telegram.__version__}")
+import openai
+
+# 🚀 Проверка версии python-telegram-bot
+current_ptb_version = tuple(map(int, telegram.__version__.split(".")))
+required_ptb_version = (20, 7)
+
+print(f"🚀 python-telegram-bot version detected: {telegram.__version__}")
+
+if current_ptb_version < required_ptb_version:
+    print("⚠️ ВНИМАНИЕ: Установлена устаревшая версия python-telegram-bot!")
+    print("⚠️ Очисти build cache на Render и перезапусти деплой.")
+else:
+    print("✅ Версия python-telegram-bot корректна и готова к запуску!")
+
+# 🤖 Проверка версии OpenAI SDK
+try:
+    openai_version = openai.__version__
+    required_openai_version = (1, 12, 0)
+    current_openai_version = tuple(map(int, openai_version.split(".")))
+
+    print(f"🧠 openai SDK version detected: {openai_version}")
+
+    if current_openai_version < required_openai_version:
+        print("⚠️ ВНИМАНИЕ: Установлена устаревшая версия OpenAI SDK!")
+        print("⚠️ Очисти build cache и перезапусти деплой.")
+    else:
+        print("✅ Версия OpenAI SDK корректна!")
+except Exception as e:
+    print(f"❌ Ошибка при проверке версии OpenAI: {e}")
 
 # === Настройки ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
