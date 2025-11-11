@@ -6,6 +6,11 @@ from openai import OpenAI
 import PyPDF2
 from docx import Document as DocxDocument
 
+import telegram
+
+# Проверка версии python-telegram-bot
+print(f"🚀 python-telegram-bot version: {telegram.__version__}")
+
 # === Настройки ===
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
