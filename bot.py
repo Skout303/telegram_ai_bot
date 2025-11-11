@@ -197,8 +197,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === Запуск ===
 import asyncio
 
+import asyncio
+
 async def main():
     print("🚀 Бот запускается (async)...")
+
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     # команды
@@ -213,9 +216,14 @@ async def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print("✅ Бот запущен и слушает Telegram...")
-    await app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("✅ Бот инициализируется...")
 
+    await app.initialize()
+    await app.start()
+    print("✅ Бот запущен и слушает Telegram...")
+    await app.updater.start_polling()
+    await app.updater.idle()
 
 if __name__ == "__main__":
     asyncio.run(main())
+
