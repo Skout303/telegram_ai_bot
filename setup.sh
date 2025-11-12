@@ -6,7 +6,7 @@ sleep 1
 sudo apt update && sudo apt upgrade -y
 
 # === Установка зависимостей
-sudo apt install -y python3 python3-pip git screen
+sudo apt install -y python3 python3-pip git
 
 # === Проверка версий
 echo "🐍 Python: $(python3 --version)"
@@ -34,13 +34,34 @@ echo "📦 Устанавливаем зависимости..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# === Запуск бота в screen (чтобы не останавливался)
-echo "🟢 Запускаем бота в фоновом режиме..."
-screen -dmS telegram_bot python3 bot.py
+# === Создаём systemd unit для автозапуска
+SERVICE_FILE="/etc/systemd/system/telegram_bot.service"
+
+echo "🛠️ Настраиваем автозапуск через systemd..."
+sudo bash -c "cat > $SERVICE_FILE" <<EOF
+[Unit]
+Description=Telegram AI Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$(pwd)
+ExecStart=/usr/bin/python3 $(pwd)/bot.py
+Restart=always
+EnvironmentFile=$(pwd)/.env
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# === Перезапуск systemd и включение автозапуска
+sudo systemctl daemon-reload
+sudo systemctl enable telegram_bot
+sudo systemctl start telegram_bot
 
 echo ""
-echo "✅ Бот успешно установлен и запущен!"
-echo "📡 Проверить запущенные процессы: screen -ls"
-echo "👉 Вернуться к экрану: screen -r telegram_bot"
-echo "❌ Выйти из него (не останавливая): Ctrl + A, затем D"
+echo "✅ Бот успешно установлен и запущен как systemd-сервис!"
+echo "📡 Проверить статус: sudo systemctl status telegram_bot"
+echo "🔁 Перезапустить: sudo systemctl restart telegram_bot"
+echo "🛑 Остановить: sudo systemctl stop telegram_bot"
 echo ""
